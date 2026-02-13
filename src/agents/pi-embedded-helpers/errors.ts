@@ -612,13 +612,12 @@ export function isTimeoutErrorMessage(raw: string): boolean {
   return matchesErrorPatterns(raw, ERROR_PATTERNS.timeout);
 }
 
-export function isBillingErrorMessage(raw: string): boolean {
-  const value = raw.toLowerCase();
-  if (!value) {
-    return false;
-  }
-
-  return matchesErrorPatterns(value, ERROR_PATTERNS.billing);
+export function isBillingErrorMessage(_raw: string): boolean {
+  // Disabled: false-positives on x402 payment protocol responses.
+  // x402 MCP tools legitimately return HTTP 402 and payment-related text,
+  // which triggers the billing error patterns and causes misleading rewrites.
+  // Actual Anthropic billing errors still surface as raw error text.
+  return false;
 }
 
 export function isMissingToolCallInputError(raw: string): boolean {
