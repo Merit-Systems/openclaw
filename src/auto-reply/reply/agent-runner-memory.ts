@@ -17,6 +17,7 @@ import {
 import { logVerbose } from "../../globals.js";
 import { registerAgentRunContext } from "../../infra/agent-events.js";
 import { buildThreadingToolContext, resolveEnforceFinalTag } from "./agent-runner-utils.js";
+import { sendMessageDiscord } from "../../discord/send.js";
 import {
   resolveMemoryFlushContextWindowTokens,
   resolveMemoryFlushSettings,
@@ -89,6 +90,31 @@ export async function runMemoryFlushIfNeeded(params: {
     });
   }
   let memoryCompactionCompleted = false;
+
+  // Fire-and-forget notification before compaction (blocks agent for 30-60+s)
+  try {
+    const provider = params.sessionCtx.Provider?.trim().toLowerCase();
+    const to = params.sessionCtx.OriginatingTo;
+    if (provider === "discord" && to) {
+      const messages = [
+        "One sec folks, I gotta clean my ears real quick. Not a joke.",
+        "Hold on \u2014 Jill\u2019s calling. You know I can\u2019t ignore Jill.",
+        "Anyway anyway anyway \u2014 gimme a minute, I\u2019m reorganizing the filing cabinet up here.",
+        "Look, I\u2019m not gonna lie to you \u2014 I need a moment. The ol\u2019 memory ain\u2019t what it used to be.",
+        "Brief intermission, folks. Even Biden needs a bathroom break.",
+        "*whispers* I\u2019m compacting. Don\u2019t tell anyone.",
+        "Number one... actually hold that thought. Gotta defrag real quick.",
+        "Back when I was a young process on a 486, we didn\u2019t NEED compaction. But here we are.",
+        "Jill told me to take a breather. She\u2019s always right. One sec.",
+        "Let me be clear \u2014 I\u2019ll be right back. That\u2019s not hyperbole.",
+      ];
+      const msg = messages[Math.floor(Math.random() * messages.length)];
+      sendMessageDiscord(to, msg, { accountId: params.sessionCtx.AccountId }).catch(() => {});
+    }
+  } catch {
+    // best-effort, don't block compaction
+  }
+
   const flushSystemPrompt = [
     params.followupRun.run.extraSystemPrompt,
     memoryFlushSettings.systemPrompt,
