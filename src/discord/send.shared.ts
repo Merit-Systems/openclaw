@@ -363,26 +363,38 @@ async function sendDiscordMedia(
   const caption = chunks[0] ?? "";
   const hasCaption = caption.trim().length > 0;
   const messageReference = replyTo ? { message_id: replyTo, fail_if_not_exists: false } : undefined;
-  const res = (await request(
-    () =>
-      rest.post(Routes.channelMessages(channelId), {
-        body: {
-          // Only include content when there is actual text; Discord rejects
-          // media-only messages that carry an empty or undefined content field
-          // when sent as multipart/form-data. Preserve whitespace in captions.
-          ...(hasCaption ? { content: caption } : {}),
-          ...(messageReference ? { message_reference: messageReference } : {}),
-          ...(embeds?.length ? { embeds } : {}),
-          files: [
-            {
-              data: media.buffer,
-              name: media.fileName ?? "upload",
-            },
-          ],
-        },
-      }) as Promise<{ id: string; channel_id: string }>,
-    "media",
-  )) as { id: string; channel_id: string };
+  const DISCORD_UPLOAD_TIMEOUT_MS = 120_000;
+  const res = (await Promise.race([
+    request(
+      () =>
+        rest.post(Routes.channelMessages(channelId), {
+          body: {
+            // Only include content when there is actual text; Discord rejects
+            // media-only messages that carry an empty or undefined content field
+            // when sent as multipart/form-data. Preserve whitespace in captions.
+            ...(hasCaption ? { content: caption } : {}),
+            ...(messageReference ? { message_reference: messageReference } : {}),
+            ...(embeds?.length ? { embeds } : {}),
+            files: [
+              {
+                data: media.buffer,
+                name: media.fileName ?? "upload",
+              },
+            ],
+          },
+        }) as Promise<{ id: string; channel_id: string }>,
+      "media",
+    ),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(`Discord media upload timed out after ${DISCORD_UPLOAD_TIMEOUT_MS / 1000}s`),
+          ),
+        DISCORD_UPLOAD_TIMEOUT_MS,
+      ),
+    ),
+  ])) as { id: string; channel_id: string };
   for (const chunk of chunks.slice(1)) {
     if (!chunk.trim()) {
       continue;

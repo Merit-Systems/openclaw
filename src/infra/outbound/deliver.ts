@@ -410,16 +410,31 @@ export async function deliverOutboundPayloads(params: {
         continue;
       }
 
+      const MEDIA_SEND_TIMEOUT_MS = 180_000;
       let first = true;
       for (const url of payloadSummary.mediaUrls) {
         throwIfAborted(abortSignal);
         const caption = first ? payloadSummary.text : "";
         first = false;
-        if (isSignalChannel) {
-          results.push(await sendSignalMedia(caption, url));
-        } else {
-          results.push(await handler.sendMedia(caption, url));
-        }
+        const sendPromise = isSignalChannel
+          ? sendSignalMedia(caption, url)
+          : handler.sendMedia(caption, url);
+        results.push(
+          await Promise.race([
+            sendPromise,
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      `Media send timed out after ${MEDIA_SEND_TIMEOUT_MS / 1000}s for ${url.slice(0, 100)}`,
+                    ),
+                  ),
+                MEDIA_SEND_TIMEOUT_MS,
+              ),
+            ),
+          ]),
+        );
       }
       emitMessageSent(true);
     } catch (err) {

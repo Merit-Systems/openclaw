@@ -29,6 +29,7 @@ type FetchMediaOptions = {
   filePathHint?: string;
   maxBytes?: number;
   maxRedirects?: number;
+  timeoutMs?: number;
   ssrfPolicy?: SsrFPolicy;
   lookupFn?: LookupFn;
 };
@@ -78,7 +79,8 @@ async function readErrorBodySnippet(res: Response, maxChars = 200): Promise<stri
 }
 
 export async function fetchRemoteMedia(options: FetchMediaOptions): Promise<FetchMediaResult> {
-  const { url, fetchImpl, filePathHint, maxBytes, maxRedirects, ssrfPolicy, lookupFn } = options;
+  const { url, fetchImpl, filePathHint, maxBytes, maxRedirects, timeoutMs, ssrfPolicy, lookupFn } =
+    options;
 
   let res: Response;
   let finalUrl = url;
@@ -88,6 +90,7 @@ export async function fetchRemoteMedia(options: FetchMediaOptions): Promise<Fetc
       url,
       fetchImpl,
       maxRedirects,
+      timeoutMs: timeoutMs ?? 60_000,
       policy: ssrfPolicy,
       lookupFn,
     });
