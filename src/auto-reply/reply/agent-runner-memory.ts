@@ -14,10 +14,10 @@ import {
   type SessionEntry,
   updateSessionStoreEntry,
 } from "../../config/sessions.js";
+import { sendMessageDiscord } from "../../discord/send.js";
 import { logVerbose } from "../../globals.js";
 import { registerAgentRunContext } from "../../infra/agent-events.js";
 import { buildThreadingToolContext, resolveEnforceFinalTag } from "./agent-runner-utils.js";
-import { sendMessageDiscord } from "../../discord/send.js";
 import {
   resolveMemoryFlushContextWindowTokens,
   resolveMemoryFlushSettings,
@@ -150,6 +150,8 @@ export async function runMemoryFlushIfNeeded(params: {
             config: params.followupRun.run.config,
             hasRepliedRef: params.opts?.hasRepliedRef,
           }),
+          currentMessageId:
+            params.sessionCtx.MessageSidFull ?? params.sessionCtx.MessageSid ?? undefined,
           senderId: params.sessionCtx.SenderId?.trim() || undefined,
           senderName: params.sessionCtx.SenderName?.trim() || undefined,
           senderUsername: params.sessionCtx.SenderUsername?.trim() || undefined,

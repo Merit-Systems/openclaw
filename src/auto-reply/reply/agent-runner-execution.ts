@@ -280,6 +280,8 @@ export async function runAgentTurnWithFallback(params: {
               config: params.followupRun.run.config,
               hasRepliedRef: params.opts?.hasRepliedRef,
             }),
+            currentMessageId:
+              params.sessionCtx.MessageSidFull ?? params.sessionCtx.MessageSid ?? undefined,
             sessionFile: params.followupRun.run.sessionFile,
             workspaceDir: params.followupRun.run.workspaceDir,
             agentDir: params.followupRun.run.agentDir,

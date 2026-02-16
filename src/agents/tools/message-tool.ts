@@ -296,6 +296,7 @@ type MessageToolOptions = {
   agentSessionKey?: string;
   config?: OpenClawConfig;
   currentChannelId?: string;
+  currentMessageId?: string;
   currentChannelProvider?: string;
   currentThreadTs?: string;
   replyToMode?: "off" | "first" | "all";
@@ -421,6 +422,16 @@ export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
       const action = readStringParam(params, "action", {
         required: true,
       }) as ChannelMessageActionName;
+
+      // For react/reactions: fall back to triggering message ID when none provided.
+      if (
+        (action === "react" || action === "reactions") &&
+        !params.messageId &&
+        options?.currentMessageId
+      ) {
+        params.messageId = options.currentMessageId;
+      }
+
       const requireExplicitTarget = options?.requireExplicitTarget === true;
       if (requireExplicitTarget && actionNeedsExplicitTarget(action)) {
         const explicitTarget =
