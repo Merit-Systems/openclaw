@@ -43,6 +43,8 @@ export function createOpenClawTools(options?: {
   pluginToolAllowlist?: string[];
   /** Current channel ID for auto-threading (Slack). */
   currentChannelId?: string;
+  /** Triggering inbound message ID (for react-to-current). */
+  currentMessageId?: string;
   /** Current thread timestamp for auto-threading (Slack). */
   currentThreadTs?: string;
   /** Reply-to mode for Slack auto-threading. */
@@ -81,6 +83,7 @@ export function createOpenClawTools(options?: {
         agentSessionKey: options?.agentSessionKey,
         config: options?.config,
         currentChannelId: options?.currentChannelId,
+        currentMessageId: options?.currentMessageId,
         currentChannelProvider: options?.agentChannel,
         currentThreadTs: options?.currentThreadTs,
         replyToMode: options?.replyToMode,

@@ -45,6 +45,8 @@ export type RunEmbeddedPiAgentParams = {
   senderIsOwner?: boolean;
   /** Current channel ID for auto-threading (Slack). */
   currentChannelId?: string;
+  /** Triggering inbound message ID (for react-to-current). */
+  currentMessageId?: string;
   /** Current thread timestamp for auto-threading (Slack). */
   currentThreadTs?: string;
   /** Reply-to mode for Slack auto-threading. */
