@@ -337,6 +337,42 @@ describe("reactMessageDiscord", () => {
       Routes.channelMessageOwnReaction("chan1", "msg1", "party_blob%3A123"),
     );
   });
+
+  it("resolves plain emoji name via guild lookup", async () => {
+    const { rest, putMock, getMock } = makeRest();
+    // First get: channel lookup returns guild_id
+    getMock.mockResolvedValueOnce({ guild_id: "guild1" });
+    // Second get: guild emojis list
+    getMock.mockResolvedValueOnce([
+      { id: "999", name: "fatbiden" },
+      { id: "888", name: "stonks" },
+    ]);
+    await reactMessageDiscord("chan1", "msg1", "fatbiden", { rest, token: "t" });
+    expect(putMock).toHaveBeenCalledWith(
+      Routes.channelMessageOwnReaction("chan1", "msg1", "fatbiden%3A999"),
+    );
+  });
+
+  it("passes through plain name when guild lookup fails", async () => {
+    const { rest, putMock, getMock } = makeRest();
+    // Channel lookup fails (DM or error)
+    getMock.mockRejectedValueOnce(new Error("not found"));
+    await reactMessageDiscord("chan1", "msg1", "fatbiden", { rest, token: "t" });
+    // Falls through as plain text — Discord will reject it, but we don't swallow the name
+    expect(putMock).toHaveBeenCalledWith(
+      Routes.channelMessageOwnReaction("chan1", "msg1", "fatbiden"),
+    );
+  });
+
+  it("passes through name:id format without extra lookup", async () => {
+    const { rest, putMock, getMock } = makeRest();
+    await reactMessageDiscord("chan1", "msg1", "fatbiden:999", { rest, token: "t" });
+    // No get calls for channel/guild lookup since it already has name:id format
+    expect(getMock).not.toHaveBeenCalled();
+    expect(putMock).toHaveBeenCalledWith(
+      Routes.channelMessageOwnReaction("chan1", "msg1", "fatbiden%3A999"),
+    );
+  });
 });
 
 describe("removeReactionDiscord", () => {
