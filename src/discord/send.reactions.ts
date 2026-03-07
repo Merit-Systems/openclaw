@@ -1,5 +1,6 @@
 import { Routes } from "discord-api-types/v10";
 import { loadConfig } from "../config/config.js";
+import { resolveGuildEmoji } from "./guild-emoji-cache.js";
 import {
   buildReactionIdentifier,
   createDiscordClient,
@@ -16,7 +17,8 @@ export async function reactMessageDiscord(
 ) {
   const cfg = opts.cfg ?? loadConfig();
   const { rest, request } = createDiscordClient(opts, cfg);
-  const encoded = normalizeReactionEmoji(emoji);
+  const resolved = await resolveGuildEmoji(rest, channelId, emoji);
+  const encoded = normalizeReactionEmoji(resolved);
   await request(
     () => rest.put(Routes.channelMessageOwnReaction(channelId, messageId, encoded)),
     "react",
