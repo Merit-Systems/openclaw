@@ -1,12 +1,14 @@
-import type { OpenClawConfig } from "openclaw/plugin-sdk/mattermost";
+import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/text-runtime";
+import type { ResolvedMattermostAccount } from "./accounts.js";
+import type { MattermostChannel } from "./client.js";
+import type { OpenClawConfig } from "./runtime-api.js";
 import {
+  evaluateSenderGroupAccessForPolicy,
   isDangerousNameMatchingEnabled,
   resolveAllowlistMatchSimple,
   resolveControlCommandGate,
   resolveEffectiveAllowFromLists,
-} from "openclaw/plugin-sdk/mattermost";
-import type { ResolvedMattermostAccount } from "./accounts.js";
-import type { MattermostChannel } from "./client.js";
+} from "./runtime-api.js";
 
 export function normalizeMattermostAllowEntry(entry: string): string {
   const trimmed = entry.trim();
@@ -19,7 +21,9 @@ export function normalizeMattermostAllowEntry(entry: string): string {
   return trimmed
     .replace(/^(mattermost|user):/i, "")
     .replace(/^@/, "")
-    .toLowerCase();
+    .trim()
+    ? normalizeLowercaseStringOrEmpty(trimmed.replace(/^(mattermost|user):/i, "").replace(/^@/, ""))
+    : "";
 }
 
 export function normalizeMattermostAllowList(entries: Array<string | number>): string[] {
@@ -198,9 +202,7 @@ export function authorizeMattermostCommandInvocation(params: {
   });
 
   const commandAuthorized =
-    kind === "direct"
-      ? dmPolicy === "open" || senderAllowedForCommands
-      : commandGate.commandAuthorized;
+    kind === "direct" ? senderAllowedForCommands : commandGate.commandAuthorized;
 
   if (kind === "direct") {
     if (dmPolicy === "disabled") {
@@ -217,7 +219,7 @@ export function authorizeMattermostCommandInvocation(params: {
       };
     }
 
-    if (dmPolicy !== "open" && !senderAllowedForCommands) {
+    if (!senderAllowedForCommands) {
       return {
         ok: false,
         denyReason: dmPolicy === "pairing" ? "dm-pairing" : "unauthorized",
@@ -231,7 +233,20 @@ export function authorizeMattermostCommandInvocation(params: {
       };
     }
   } else {
-    if (groupPolicy === "disabled") {
+    const senderGroupAccess = evaluateSenderGroupAccessForPolicy({
+      groupPolicy,
+      groupAllowFrom: effectiveGroupAllowFrom,
+      senderId,
+      isSenderAllowed: (_senderId, allowFrom) =>
+        isMattermostSenderAllowed({
+          senderId,
+          senderName,
+          allowFrom,
+          allowNameMatching,
+        }),
+    });
+
+    if (!senderGroupAccess.allowed && senderGroupAccess.reason === "disabled") {
       return {
         ok: false,
         denyReason: "channels-disabled",
@@ -245,33 +260,32 @@ export function authorizeMattermostCommandInvocation(params: {
       };
     }
 
-    if (groupPolicy === "allowlist") {
-      if (effectiveGroupAllowFrom.length === 0) {
-        return {
-          ok: false,
-          denyReason: "channel-no-allowlist",
-          commandAuthorized: false,
-          channelInfo,
-          kind,
-          chatType,
-          channelName,
-          channelDisplay,
-          roomLabel,
-        };
-      }
-      if (!groupAllowedForCommands) {
-        return {
-          ok: false,
-          denyReason: "unauthorized",
-          commandAuthorized: false,
-          channelInfo,
-          kind,
-          chatType,
-          channelName,
-          channelDisplay,
-          roomLabel,
-        };
-      }
+    if (!senderGroupAccess.allowed && senderGroupAccess.reason === "empty_allowlist") {
+      return {
+        ok: false,
+        denyReason: "channel-no-allowlist",
+        commandAuthorized: false,
+        channelInfo,
+        kind,
+        chatType,
+        channelName,
+        channelDisplay,
+        roomLabel,
+      };
+    }
+
+    if (!senderGroupAccess.allowed && senderGroupAccess.reason === "sender_not_allowlisted") {
+      return {
+        ok: false,
+        denyReason: "unauthorized",
+        commandAuthorized: false,
+        channelInfo,
+        kind,
+        chatType,
+        channelName,
+        channelDisplay,
+        roomLabel,
+      };
     }
 
     if (commandGate.shouldBlock) {
