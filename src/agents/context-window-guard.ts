@@ -1,13 +1,13 @@
+import { findNormalizedProviderValue } from "@openclaw/model-catalog-core/provider-id";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { resolveProviderEndpoint } from "./provider-attribution.js";
-import { findNormalizedProviderValue } from "./provider-id.js";
 
 export const CONTEXT_WINDOW_HARD_MIN_TOKENS = 4_000;
 export const CONTEXT_WINDOW_WARN_BELOW_TOKENS = 8_000;
-export const CONTEXT_WINDOW_HARD_MIN_RATIO = 0.1;
-export const CONTEXT_WINDOW_WARN_BELOW_RATIO = 0.2;
+const CONTEXT_WINDOW_HARD_MIN_RATIO = 0.1;
+const CONTEXT_WINDOW_WARN_BELOW_RATIO = 0.2;
 
-export type ContextWindowSource = "model" | "modelsConfig" | "agentContextTokens" | "default";
+type ContextWindowSource = "model" | "modelsConfig" | "agentContextTokens" | "default";
 
 export type ContextWindowInfo = {
   tokens: number;
@@ -21,6 +21,27 @@ function normalizePositiveInt(value: unknown): number | null {
   }
   const int = Math.floor(value);
   return int > 0 ? int : null;
+}
+
+function modelIdMatchesProviderScope(params: {
+  configuredId?: string;
+  provider: string;
+  modelId: string;
+}): boolean {
+  const configuredId = params.configuredId?.trim();
+  if (!configuredId) {
+    return false;
+  }
+  if (configuredId === params.modelId) {
+    return true;
+  }
+  const providerPrefix = params.provider ? `${params.provider}/` : "";
+  if (!providerPrefix) {
+    return false;
+  }
+  const stripProvider = (id: string) =>
+    id.startsWith(providerPrefix) ? id.slice(providerPrefix.length) : id;
+  return stripProvider(configuredId) === stripProvider(params.modelId);
 }
 
 export function resolveContextWindowInfo(params: {
@@ -40,7 +61,13 @@ export function resolveContextWindowInfo(params: {
       | undefined;
     const providerEntry = findNormalizedProviderValue(providers, params.provider);
     const models = Array.isArray(providerEntry?.models) ? providerEntry.models : [];
-    const match = models.find((m) => m?.id === params.modelId);
+    const match = models.find((model) =>
+      modelIdMatchesProviderScope({
+        configuredId: model?.id,
+        provider: params.provider,
+        modelId: params.modelId,
+      }),
+    );
     return normalizePositiveInt(match?.contextTokens) ?? normalizePositiveInt(match?.contextWindow);
   })();
   const fromModel =
@@ -62,24 +89,24 @@ export function resolveContextWindowInfo(params: {
   return baseInfo;
 }
 
-export type ContextWindowGuardResult = ContextWindowInfo & {
+type ContextWindowGuardResult = ContextWindowInfo & {
   hardMinTokens: number;
   warnBelowTokens: number;
   shouldWarn: boolean;
   shouldBlock: boolean;
 };
 
-export type ContextWindowGuardThresholds = {
+type ContextWindowGuardThresholds = {
   hardMinTokens: number;
   warnBelowTokens: number;
 };
 
-export type ContextWindowGuardHint = {
+type ContextWindowGuardHint = {
   endpointClass: ReturnType<typeof resolveProviderEndpoint>["endpointClass"];
   likelySelfHosted: boolean;
 };
 
-export function resolveContextWindowGuardHint(params: {
+function resolveContextWindowGuardHint(params: {
   runtimeBaseUrl?: string | null;
 }): ContextWindowGuardHint {
   const endpoint = resolveProviderEndpoint(params.runtimeBaseUrl ?? undefined);

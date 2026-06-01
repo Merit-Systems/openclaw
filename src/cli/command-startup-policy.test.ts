@@ -11,8 +11,10 @@ import {
 describe("command-startup-policy", () => {
   it("matches config guard bypass commands", () => {
     expect(shouldBypassConfigGuardForCommandPath(["backup", "create"])).toBe(true);
+    expect(shouldBypassConfigGuardForCommandPath(["config"])).toBe(true);
     expect(shouldBypassConfigGuardForCommandPath(["config", "validate"])).toBe(true);
     expect(shouldBypassConfigGuardForCommandPath(["config", "schema"])).toBe(true);
+    expect(shouldBypassConfigGuardForCommandPath(["config", "set"])).toBe(false);
     expect(shouldBypassConfigGuardForCommandPath(["status"])).toBe(false);
   });
 
@@ -22,7 +24,7 @@ describe("command-startup-policy", () => {
         commandPath: ["status"],
         suppressDoctorStdout: true,
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldSkipRouteConfigGuardForCommandPath({
         commandPath: ["gateway", "status"],
@@ -175,6 +177,33 @@ describe("command-startup-policy", () => {
     expect(shouldHideCliBannerForCommandPath(["status"], {})).toBe(false);
   });
 
+  it("uses process env banner suppression when startup env is omitted", () => {
+    const originalHideBanner = process.env.OPENCLAW_HIDE_BANNER;
+    try {
+      process.env.OPENCLAW_HIDE_BANNER = "1";
+
+      expect(
+        resolveCliStartupPolicy({
+          commandPath: ["status"],
+          jsonOutputMode: false,
+        }).hideBanner,
+      ).toBe(true);
+      expect(
+        resolveCliStartupPolicy({
+          commandPath: ["status"],
+          jsonOutputMode: false,
+          env: {},
+        }).hideBanner,
+      ).toBe(false);
+    } finally {
+      if (originalHideBanner === undefined) {
+        delete process.env.OPENCLAW_HIDE_BANNER;
+      } else {
+        process.env.OPENCLAW_HIDE_BANNER = originalHideBanner;
+      }
+    }
+  });
+
   it("matches CLI PATH bootstrap policy", () => {
     expect(shouldEnsureCliPathForCommandPath(["status"])).toBe(false);
     expect(shouldEnsureCliPathForCommandPath(["sessions"])).toBe(false);
@@ -190,25 +219,29 @@ describe("command-startup-policy", () => {
       resolveCliStartupPolicy({
         commandPath: ["status"],
         jsonOutputMode: true,
+        env: {},
       }),
     ).toEqual({
       suppressDoctorStdout: true,
       hideBanner: false,
       skipConfigGuard: false,
       loadPlugins: false,
+      pluginRegistry: { scope: "channels" },
     });
 
     expect(
       resolveCliStartupPolicy({
         commandPath: ["status"],
         jsonOutputMode: true,
+        env: {},
         routeMode: true,
       }),
     ).toEqual({
       suppressDoctorStdout: true,
       hideBanner: false,
-      skipConfigGuard: true,
+      skipConfigGuard: false,
       loadPlugins: false,
+      pluginRegistry: { scope: "channels" },
     });
   });
 });

@@ -31,8 +31,12 @@ jobs:
       contents: read
       pull-requests: write
     runs-on: ubuntu-24.04
+    env:
+      GH_APP_PRIVATE_KEY_AVAILABLE: ${{ secrets.GH_APP_PRIVATE_KEY != '' }}
+      GH_APP_PRIVATE_KEY_FALLBACK_AVAILABLE: ${{ secrets.GH_APP_PRIVATE_KEY_FALLBACK != '' }}
     steps:
       - uses: actions/create-github-app-token@v3
+        if: env.GH_APP_PRIVATE_KEY_AVAILABLE == 'true'
         id: app-token
         continue-on-error: true
         with:
@@ -40,19 +44,20 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       - uses: actions/create-github-app-token@v3
         id: app-token-fallback
-        if: steps.app-token.outcome == 'failure'
+        if: steps.app-token.outcome != 'success' && env.GH_APP_PRIVATE_KEY_FALLBACK_AVAILABLE == 'true'
+        continue-on-error: true
         with:
           app-id: "2971289"
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY_FALLBACK }}
       - uses: actions/labeler@v6
         with:
           configuration-path: .github/labeler.yml
-          repo-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          repo-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           sync-labels: true
       - name: Apply PR size label
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const pullRequest = context.payload.pull_request;
             if (!pullRequest) {
@@ -89,10 +94,10 @@ jobs:
               per_page: 100,
             });
 
-            const excludedLockfiles = new Set(["pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lockb"]);
+            const excludedLockfiles = new Set(["pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"]);
             const totalChangedLines = files.reduce((total, file) => {
               const path = file.filename ?? "";
-              if (path === "docs.acp.md" || path.startsWith("docs/") || excludedLockfiles.has(path)) {
+              if (path.startsWith("docs/") || excludedLockfiles.has(path) || path.endsWith("/package-lock.json") || path.endsWith("/npm-shrinkwrap.json")) {
                 return total;
               }
               return total + (file.additions ?? 0) + (file.deletions ?? 0);
@@ -141,7 +146,7 @@ jobs:
       - name: Apply maintainer or trusted-contributor label
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const login = context.payload.pull_request?.user?.login;
             if (!login) {
@@ -212,7 +217,7 @@ jobs:
       - name: Apply beta-blocker title label
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const pullRequest = context.payload.pull_request;
             if (!pullRequest) {
@@ -265,7 +270,7 @@ jobs:
       - name: Apply too-many-prs label
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const pullRequest = context.payload.pull_request;
             if (!pullRequest) {
@@ -274,7 +279,7 @@ jobs:
 
             const activePrLimitLabel = "r: too-many-prs";
             const activePrLimitOverrideLabel = "r: too-many-prs-override";
-            const activePrLimit = 10;
+            const activePrLimit = 20;
             const labelColor = "B60205";
             const labelDescription = `Author has more than ${activePrLimit} active PRs in this repo`;
             const authorLogin = pullRequest.user?.login;
@@ -295,6 +300,25 @@ jobs:
                 .map((label) => (typeof label === "string" ? label : label?.name))
                 .filter((name) => typeof name === "string"),
             );
+
+            if (pullRequest.user?.type === "Bot" || /\[bot\]$/i.test(authorLogin) || authorLogin.startsWith("app/")) {
+              if (labelNames.has(activePrLimitLabel)) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: pullRequest.number,
+                    name: activePrLimitLabel,
+                  });
+                } catch (error) {
+                  if (error?.status !== 404) {
+                    throw error;
+                  }
+                }
+              }
+              core.info(`Skipping active PR limit for GitHub App author ${authorLogin}.`);
+              return;
+            }
 
             if (labelNames.has(activePrLimitOverrideLabel)) {
               if (labelNames.has(activePrLimitLabel)) {
@@ -446,8 +470,12 @@ jobs:
       contents: read
       pull-requests: write
     runs-on: ubuntu-24.04
+    env:
+      GH_APP_PRIVATE_KEY_AVAILABLE: ${{ secrets.GH_APP_PRIVATE_KEY != '' }}
+      GH_APP_PRIVATE_KEY_FALLBACK_AVAILABLE: ${{ secrets.GH_APP_PRIVATE_KEY_FALLBACK != '' }}
     steps:
       - uses: actions/create-github-app-token@v3
+        if: env.GH_APP_PRIVATE_KEY_AVAILABLE == 'true'
         id: app-token
         continue-on-error: true
         with:
@@ -455,14 +483,15 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       - uses: actions/create-github-app-token@v3
         id: app-token-fallback
-        if: steps.app-token.outcome == 'failure'
+        if: steps.app-token.outcome != 'success' && env.GH_APP_PRIVATE_KEY_FALLBACK_AVAILABLE == 'true'
+        continue-on-error: true
         with:
           app-id: "2971289"
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY_FALLBACK }}
       - name: Backfill PR labels
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -584,10 +613,10 @@ jobs:
                 per_page: 100,
               });
 
-              const excludedLockfiles = new Set(["pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lockb"]);
+              const excludedLockfiles = new Set(["pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"]);
               const totalChangedLines = files.reduce((total, file) => {
                 const path = file.filename ?? "";
-                if (path === "docs.acp.md" || path.startsWith("docs/") || excludedLockfiles.has(path)) {
+                if (path.startsWith("docs/") || excludedLockfiles.has(path) || path.endsWith("/package-lock.json") || path.endsWith("/npm-shrinkwrap.json")) {
                   return total;
                 }
                 return total + (file.additions ?? 0) + (file.deletions ?? 0);
@@ -741,11 +770,16 @@ jobs:
             core.info(`Processed ${processed} pull requests.`);
 
   label-issues:
+    if: github.event_name == 'issues'
     permissions:
       issues: write
     runs-on: ubuntu-24.04
+    env:
+      GH_APP_PRIVATE_KEY_AVAILABLE: ${{ secrets.GH_APP_PRIVATE_KEY != '' }}
+      GH_APP_PRIVATE_KEY_FALLBACK_AVAILABLE: ${{ secrets.GH_APP_PRIVATE_KEY_FALLBACK != '' }}
     steps:
       - uses: actions/create-github-app-token@v3
+        if: env.GH_APP_PRIVATE_KEY_AVAILABLE == 'true'
         id: app-token
         continue-on-error: true
         with:
@@ -753,14 +787,15 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       - uses: actions/create-github-app-token@v3
         id: app-token-fallback
-        if: steps.app-token.outcome == 'failure'
+        if: steps.app-token.outcome != 'success' && env.GH_APP_PRIVATE_KEY_FALLBACK_AVAILABLE == 'true'
+        continue-on-error: true
         with:
           app-id: "2971289"
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY_FALLBACK }}
       - name: Apply maintainer or trusted-contributor label
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const login = context.payload.issue?.user?.login;
             if (!login) {
@@ -831,7 +866,7 @@ jobs:
       - name: Apply beta-blocker title label
         uses: actions/github-script@v9
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const issue = context.payload.issue;
             if (!issue || issue.pull_request) {

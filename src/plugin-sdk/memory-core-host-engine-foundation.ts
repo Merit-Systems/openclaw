@@ -32,9 +32,9 @@ export type {
   MemoryQmdSearchMode,
 } from "../config/types.memory.js";
 export type { MemorySearchConfig } from "../config/types.tools.js";
-export { writeFileWithinRoot } from "../infra/fs-safe.js";
+export { root } from "../infra/fs-safe.js";
 export { createSubsystemLogger } from "../logging/subsystem.js";
-export { detectMime } from "../media/mime.js";
+export { detectMime } from "@openclaw/media-core/mime";
 export { onSessionTranscriptUpdate } from "../sessions/transcript-events.js";
 export { resolveGlobalSingleton } from "../shared/global-singleton.js";
 export { runTasksWithConcurrency } from "../utils/run-with-concurrency.js";

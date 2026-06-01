@@ -7,9 +7,11 @@ import {
 } from "./deadcode-unused-files.allowlist.mjs";
 
 const KNIP_VERSION = "6.8.0";
+export const KNIP_TIMEOUT_MS = 10 * 60 * 1000;
+export const KNIP_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
 const KNIP_ARGS = [
   "--config",
-  "knip.config.ts",
+  "config/knip.config.ts",
   "--production",
   "--no-progress",
   "--reporter",
@@ -26,6 +28,10 @@ function uniqueSorted(values) {
   return [...new Set(values.map(normalizeRepoPath))].toSorted((left, right) =>
     left.localeCompare(right),
   );
+}
+
+function isLikelyRepoFilePath(value) {
+  return /^(apps|docs|extensions|packages|scripts|src|test|ui)\//u.test(normalizeRepoPath(value));
 }
 
 export function parseKnipCompactUnusedFiles(output) {
@@ -50,7 +56,10 @@ export function parseKnipCompactUnusedFiles(output) {
     if (sawUnusedFilesSection && !inUnusedFilesSection) {
       continue;
     }
-    files.push(line.slice(separatorIndex + 2).trim());
+    const file = line.slice(separatorIndex + 2).trim();
+    if (isLikelyRepoFilePath(file)) {
+      files.push(file);
+    }
   }
 
   return uniqueSorted(files);
@@ -101,18 +110,28 @@ export function formatUnusedFileComparison(comparison) {
   return lines.join("\n");
 }
 
-export function runKnipUnusedFiles() {
-  const result = spawnSync(
+function spawnErrorCode(error) {
+  return error && typeof error === "object" && "code" in error ? String(error.code) : undefined;
+}
+
+export function runKnipUnusedFiles(params = {}) {
+  const run = params.spawnSyncCommand ?? spawnSync;
+  const result = run(
     "pnpm",
     ["--config.minimum-release-age=0", "dlx", `knip@${KNIP_VERSION}`, ...KNIP_ARGS],
     {
       encoding: "utf8",
+      killSignal: "SIGTERM",
+      maxBuffer: params.maxBufferBytes ?? KNIP_MAX_BUFFER_BYTES,
       stdio: ["ignore", "pipe", "pipe"],
+      timeout: params.timeoutMs ?? KNIP_TIMEOUT_MS,
     },
   );
   return {
     status: result.status,
     signal: result.signal,
+    errorCode: spawnErrorCode(result.error),
+    errorMessage: result.error?.message,
     output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
   };
 }
@@ -137,6 +156,18 @@ export function checkUnusedFiles(
 
 function main() {
   const result = runKnipUnusedFiles();
+  if (result.errorCode || result.status === null) {
+    console.error(
+      `deadcode unused-file scan failed: ${result.errorCode ?? result.signal ?? "unknown"}${
+        result.errorMessage ? `: ${result.errorMessage}` : ""
+      }`,
+    );
+    if (result.output) {
+      console.error(result.output);
+    }
+    process.exitCode = 1;
+    return;
+  }
   const check = checkUnusedFiles(result.output);
   if (!check.ok) {
     if (check.message) {

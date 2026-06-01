@@ -1,13 +1,16 @@
 import { vi } from "vitest";
 import { agentCommand } from "./test-helpers.runtime-state.js";
 
-export type AgentCommandCall = Record<string, unknown>;
+type AgentCommandCall = Record<string, unknown>;
 
 function agentCommandCalls(): Array<[AgentCommandCall]> {
   return vi.mocked(agentCommand).mock.calls as unknown as Array<[AgentCommandCall]>;
 }
 
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 export async function waitForAgentCommandCall(runId: string): Promise<AgentCommandCall> {
   for (let elapsed = 0; elapsed <= 2_000; elapsed += 5) {

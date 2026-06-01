@@ -1,11 +1,13 @@
+import { note } from "../../packages/terminal-core/src/note.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { buildGatewayConnectionDetails, callGateway } from "../gateway/call.js";
 import type { DoctorMemoryStatusPayload } from "../gateway/server-methods/doctor.js";
 import { collectChannelStatusIssues } from "../infra/channels-status-issues.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import type { RuntimeEnv } from "../runtime.js";
-import { note } from "../terminal/note.js";
+import { VERSION } from "../version.js";
 import { formatHealthCheckFailure } from "./health-format.js";
+import type { StatusSummary } from "./status.types.js";
 
 export type GatewayMemoryProbe = {
   checked: boolean;
@@ -24,23 +26,40 @@ function isGatewayCallTimeout(message: string): boolean {
   return /^gateway timeout after \d+ms(?:\n|$)/.test(message);
 }
 
+function noteCliGatewayVersionSkew(status: StatusSummary | undefined): void {
+  const gatewayVersion = status?.runtimeVersion?.trim();
+  if (!gatewayVersion || gatewayVersion === VERSION) {
+    return;
+  }
+  note(
+    [
+      `This command is OpenClaw ${VERSION}; the running Gateway is OpenClaw ${gatewayVersion}.`,
+      "Check `openclaw --version`, `which openclaw`, and `openclaw gateway status --deep`.",
+      "If this mismatch is unexpected, update PATH so `openclaw` points to the version you want, or reinstall the Gateway service from that same OpenClaw install.",
+    ].join("\n"),
+    "OpenClaw version mismatch",
+  );
+}
+
 export async function checkGatewayHealth(params: {
   runtime: RuntimeEnv;
   cfg: OpenClawConfig;
   timeoutMs?: number;
-}) {
+}): Promise<{ healthOk: boolean; status?: StatusSummary }> {
   const gatewayDetails = buildGatewayConnectionDetails({ config: params.cfg });
   const timeoutMs =
     typeof params.timeoutMs === "number" && params.timeoutMs > 0 ? params.timeoutMs : 10_000;
   let healthOk = false;
+  let status: StatusSummary | undefined;
   try {
-    await callGateway({
+    status = await callGateway<StatusSummary>({
       method: "status",
       params: { includeChannelSummary: false },
       timeoutMs,
       config: params.cfg,
     });
     healthOk = true;
+    noteCliGatewayVersionSkew(status);
   } catch (err) {
     const message = String(err);
     if (message.includes("gateway closed")) {
@@ -53,12 +72,12 @@ export async function checkGatewayHealth(params: {
 
   if (healthOk) {
     try {
-      const status = await callGateway({
+      const statusLocal = await callGateway({
         method: "channels.status",
         params: { probe: true, timeoutMs: 5000 },
         timeoutMs: 6000,
       });
-      const issues = collectChannelStatusIssues(status);
+      const issues = collectChannelStatusIssues(statusLocal);
       if (issues.length > 0) {
         note(
           issues
@@ -77,7 +96,7 @@ export async function checkGatewayHealth(params: {
     }
   }
 
-  return { healthOk };
+  return { healthOk, status };
 }
 
 export async function probeGatewayMemoryStatus(params: {

@@ -1,4 +1,4 @@
-import { normalizeOptionalString } from "../../shared/string-coerce.js";
+import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { listBundledChannelPluginIdsForRoot } from "./bundled-ids.js";
 import { resolveBundledChannelRootScope } from "./bundled-root.js";
 import {
@@ -71,10 +71,6 @@ export function* iterateBootstrapChannelPlugins(): IterableIterator<ChannelPlugi
       yield plugin;
     }
   }
-}
-
-export function listBootstrapChannelPlugins(): readonly ChannelPlugin[] {
-  return [...iterateBootstrapChannelPlugins()];
 }
 
 export function getBootstrapChannelPlugin(id: ChannelId): ChannelPlugin | undefined {
