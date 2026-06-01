@@ -118,11 +118,16 @@ jobs:
 
           if git cat-file -e "${BASE_SHA}:.github/zizmor.yml" 2>/dev/null; then
             git show "${BASE_SHA}:.github/zizmor.yml" > "$trusted_zizmor_config"
+          elif git cat-file -e "${BASE_SHA}:zizmor.yml" 2>/dev/null; then
+            git show "${BASE_SHA}:zizmor.yml" > "$trusted_zizmor_config"
           elif git show "refs/remotes/origin/${BASE_REF}:.github/zizmor.yml" \
             > "$trusted_zizmor_config" 2>/dev/null; then
             echo "Base SHA ${BASE_SHA} does not expose .github/zizmor.yml; using origin/${BASE_REF} instead."
+          elif git show "refs/remotes/origin/${BASE_REF}:zizmor.yml" \
+            > "$trusted_zizmor_config" 2>/dev/null; then
+            echo "Base SHA ${BASE_SHA} does not expose .github/zizmor.yml; using origin/${BASE_REF}:zizmor.yml instead."
           else
-            echo "::error title=trusted zizmor config unavailable::Could not read .github/zizmor.yml from ${BASE_SHA} or origin/${BASE_REF}."
+            echo "::error title=trusted zizmor config unavailable::Could not read .github/zizmor.yml or zizmor.yml from ${BASE_SHA} or origin/${BASE_REF}."
             exit 1
           fi
 
@@ -133,9 +138,19 @@ jobs:
           config_path = Path(sys.argv[1])
           zizmor_config_path = sys.argv[2]
           text = config_path.read_text()
-          if ".github/zizmor.yml" not in text:
-            raise SystemExit("trusted pre-commit config does not reference .github/zizmor.yml")
-          config_path.write_text(text.replace(".github/zizmor.yml", zizmor_config_path))
+          if ".github/zizmor.yml" in text:
+            config_path.write_text(text.replace(".github/zizmor.yml", zizmor_config_path))
+          elif "zizmor.yml" in text:
+            config_path.write_text(text.replace("zizmor.yml", zizmor_config_path))
+          else:
+            before, marker, after = text.partition("      - id: zizmor")
+            if not marker:
+              raise SystemExit("trusted pre-commit config does not include a zizmor hook")
+            args_prefix = "        args: ["
+            if args_prefix not in after:
+              raise SystemExit("trusted pre-commit zizmor hook does not expose inline args")
+            after = after.replace(args_prefix, f"{args_prefix}--config, {zizmor_config_path}, ", 1)
+            config_path.write_text(before + marker + after)
           PY
 
           echo "PRE_COMMIT_CONFIG_PATH=$trusted_config" >> "$GITHUB_ENV"
