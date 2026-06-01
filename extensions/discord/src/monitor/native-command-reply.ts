@@ -13,6 +13,8 @@ import type {
   TopLevelComponents,
 } from "../internal/discord.js";
 
+export const DISCORD_EMPTY_VISIBLE_REPLY_WARNING = "⚠️ Command produced no visible reply.";
+
 export function isDiscordUnknownInteraction(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -89,10 +91,11 @@ export async function deliverDiscordInteractionReply(params: {
     files?: { name: string; data: Buffer }[],
     components?: TopLevelComponents[],
   ) => {
-    const payload =
+    const contentPayload = content ? { content } : {};
+    const payloadLocal =
       files && files.length > 0
         ? {
-            content,
+            ...contentPayload,
             ...(components ? { components } : {}),
             ...(params.responseEphemeral !== undefined
               ? { ephemeral: params.responseEphemeral }
@@ -106,7 +109,7 @@ export async function deliverDiscordInteractionReply(params: {
             }),
           }
         : {
-            content,
+            ...contentPayload,
             ...(components ? { components } : {}),
             ...(params.responseEphemeral !== undefined
               ? { ephemeral: params.responseEphemeral }
@@ -114,12 +117,12 @@ export async function deliverDiscordInteractionReply(params: {
           };
     await safeDiscordInteractionCall("interaction send", async () => {
       if (!preferFollowUp && !hasReplied) {
-        await interaction.reply(payload);
+        await interaction.reply(payloadLocal);
         hasReplied = true;
         firstMessageComponents = undefined;
         return;
       }
-      await interaction.followUp(payload);
+      await interaction.followUp(payloadLocal);
       hasReplied = true;
       firstMessageComponents = undefined;
     });
@@ -159,7 +162,7 @@ export async function deliverDiscordInteractionReply(params: {
   if (!reply.hasText && !firstMessageComponents) {
     return;
   }
-  const chunks =
+  let chunks =
     reply.text || firstMessageComponents
       ? resolveTextChunksWithFallback(
           reply.text,
@@ -170,6 +173,9 @@ export async function deliverDiscordInteractionReply(params: {
           }),
         )
       : [];
+  if (chunks.length === 0 && firstMessageComponents) {
+    chunks = [""];
+  }
   for (const chunk of chunks) {
     if (!chunk.trim() && !firstMessageComponents) {
       continue;

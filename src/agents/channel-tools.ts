@@ -1,10 +1,11 @@
+import { normalizeStringEntries } from "@openclaw/normalization-core/string-normalization";
 import { getChannelPlugin, listChannelPlugins } from "../channels/plugins/index.js";
 import {
   createMessageActionDiscoveryContext,
   resolveMessageActionDiscoveryForPlugin,
   resolveMessageActionDiscoveryChannelId,
   resolveCurrentChannelMessageToolDiscoveryAdapter,
-  __testing as messageActionTesting,
+  testing as messageActionTesting,
 } from "../channels/plugins/message-action-discovery.js";
 import {
   channelPluginHasNativeApprovalPromptUi,
@@ -31,7 +32,6 @@ type ChannelMessageActionDiscoveryParams = {
   sessionId?: string | null;
   agentId?: string | null;
   requesterSenderId?: string | null;
-  senderIsOwner?: boolean;
 };
 
 const channelAgentToolMeta = new WeakMap<ChannelAgentTool, ChannelAgentToolMeta>();
@@ -129,26 +129,7 @@ export function resolveChannelMessageToolHints(params: {
     return [];
   }
   const cfg = params.cfg ?? ({} as OpenClawConfig);
-  return (resolve({ cfg, accountId: params.accountId }) ?? [])
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
-export function resolveChannelMessageToolCapabilities(params: {
-  cfg?: OpenClawConfig;
-  channel?: string | null;
-  accountId?: string | null;
-}): string[] {
-  const channelId = normalizeAnyChannelId(params.channel);
-  if (!channelId) {
-    return [];
-  }
-  const resolve = getChannelPlugin(channelId)?.agentPrompt?.messageToolCapabilities;
-  if (!resolve) {
-    return [];
-  }
-  const cfg = params.cfg ?? ({} as OpenClawConfig);
-  return normalizePromptCapabilities(resolve({ cfg, accountId: params.accountId }));
+  return normalizeStringEntries(resolve({ cfg, accountId: params.accountId }));
 }
 
 export function resolveChannelPromptCapabilities(params: {
@@ -172,7 +153,7 @@ export function resolveChannelPromptCapabilities(params: {
 }
 
 function normalizePromptCapabilities(capabilities?: readonly string[] | null): string[] {
-  return (capabilities ?? []).map((entry) => entry.trim()).filter(Boolean);
+  return normalizeStringEntries(capabilities ?? []);
 }
 
 export function resolveChannelReactionGuidance(params: {
@@ -199,8 +180,9 @@ export function resolveChannelReactionGuidance(params: {
   };
 }
 
-export const __testing = {
+export const testing = {
   resetLoggedListActionErrors() {
     messageActionTesting.resetLoggedMessageActionErrors();
   },
 };
+export { testing as __testing };
